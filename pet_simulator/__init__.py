@@ -1,0 +1,2 @@
+from pet_simulator.simulator import SinogramSimulator
+from pet_simulator.simulator_castor import SinogramSimulatorCastor
