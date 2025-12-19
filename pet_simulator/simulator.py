@@ -48,7 +48,8 @@ class SinogramSimulator:
         np.random.seed(seed)
 
     def simulate(self, img_path, img_att_path=None,
-        nb_count=3e6,
+        nb_counts=3e6,
+        average_size=0.5,
         scatter_component=0.35,
         random_component=0.40,
         gaussian_PSF=4 # in mm
@@ -67,6 +68,9 @@ class SinogramSimulator:
 
         assert len(img_object.shape) == 2, "Only 2D images are supported."
         assert img_att is None or img_att.shape == img_object.shape, "Attenuation image must have the same shape as object image."
+
+        # Compute object size
+        obj_size = np.count_nonzero(img_object > 0) / (img_object.shape[0] * img_object.shape[1])
 
         # PSF in image domain
         if gaussian_PSF > 0.0:
@@ -128,7 +132,7 @@ class SinogramSimulator:
         # add Poisson noise
         prompt = np.random.poisson(noise_free_prompt)
 
-        return true_counts, sino_scatter, sino_random, noise_free_prompt, prompt
+        return true_counts, sino_scatter, sino_random, noise_free_prompt, prompt, scale
 
     def run(self, img_path, img_att_path, dest_path, simulate_args={}):
 
@@ -138,14 +142,14 @@ class SinogramSimulator:
         self.dout = dest_path
 
         # Simulation
-        _, sino_scatter, sino_random, noise_free_prompt, prompt = self.simulate(img_path, img_att_path, **simulate_args)
+        _, sino_scatter, sino_random, noise_free_prompt, prompt, scale = self.simulate(img_path, img_att_path, **simulate_args)
 
         # Save data with Castor conventions
         # cast prompt to int16
         prompt = prompt.astype(np.int16)
 
         for filename, data in zip(['simu_sc.s', 'simu_rd.s', 'simu_nfpt.s', 'simu_pt.s'], [sino_scatter, sino_random, noise_free_prompt, prompt]):
-            write_binary_file(os.path.join(self.dout, 'simu', filename), data, binary_extension='')
+            write_binary_file(os.path.join(self.dout, 'simu', filename), data, binary_extension='', metadata={'scale_factor': scale})
 
 if __name__ == "__main__":
 
@@ -155,6 +159,8 @@ if __name__ == "__main__":
 
     generator = Phantom2DPetGenerator(shape=(256,256), voxel_size=(2,2,2))
     generator.set_seed(42)
+    average_size = generator.calibrate(n_samples=100)
+    print(f"Calibrated average object size: {average_size:.4f}")
     obj_path, att_path = generator.run(os.path.join(os.getenv('WORKSPACE'), 'data/data1/object'))
 
     simulator = SinogramSimulator()
@@ -162,7 +168,7 @@ if __name__ == "__main__":
 
     # true_counts, scatter, random, noise_free_prompt, prompt = simulator.simulate(img_path=obj_path, img_att_path=att_path, nb_count=3e6)
     simu_dest_path=os.path.join(os.getenv('WORKSPACE'), 'data/data1/simulation')
-    simulator.run(img_path=obj_path, img_att_path=att_path, dest_path=simu_dest_path, simulate_args={'nb_count': 3e6})
+    simulator.run(img_path=obj_path, img_att_path=att_path, dest_path=simu_dest_path, simulate_args={'nb_counts': 3e6, 'average_size': average_size})
 
     scatter = read_castor_binary_file(os.path.join(simu_dest_path, 'simu_sc.hdr')).squeeze()
     random = read_castor_binary_file(os.path.join(simu_dest_path, 'simu_rd.hdr')).squeeze()
