@@ -90,10 +90,6 @@ class SinogramSimulator:
         voxel_size_ratio = true_counts.shape[1] / self.nb_radius_px
         true_counts = cv2.resize(true_counts, (self.nb_radius_px, self.n_angles), interpolation=cv2.INTER_LINEAR)
 
-        # scale to desired total true counts
-        scale = nb_count / true_counts.sum()
-        true_counts = true_counts * scale
-
         # PSF in sinogram domain
         if gaussian_PSF > 0.0:
             pass
@@ -121,6 +117,13 @@ class SinogramSimulator:
 
         # compute noise-free prompt sinogram
         noise_free_prompt = true_counts + sino_scatter + sino_random
+
+        # scale to desired total true counts
+        scale = (nb_counts * (obj_size / average_size)) / noise_free_prompt.sum()
+        noise_free_prompt = np.round(noise_free_prompt * scale)
+        true_counts = true_counts * scale
+        sino_scatter = sino_scatter * scale
+        sino_random = sino_random * scale
 
         # add Poisson noise
         prompt = np.random.poisson(noise_free_prompt)
